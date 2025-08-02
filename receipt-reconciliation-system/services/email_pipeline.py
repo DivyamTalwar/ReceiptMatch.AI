@@ -120,15 +120,15 @@ class EmailProcessingPipeline:
                         "extracted_data": extracted_data
                     }
                     
-                    # Convert date object to datetime object before saving
-                    if receipt_data["transaction_date"]:
-                        if isinstance(receipt_data["transaction_date"], datetime):
-                            pass  # Already a datetime
-                        else:
-                            # Assume it's a date object
-                            receipt_data["transaction_date"] = datetime.combine(
-                                receipt_data["transaction_date"], datetime.min.time()
-                            )
+                    # Convert date string to datetime object before saving
+                    if receipt_data.get("transaction_date"):
+                        if isinstance(receipt_data["transaction_date"], str):
+                            try:
+                                receipt_data["transaction_date"] = datetime.strptime(receipt_data["transaction_date"], "%Y-%m-%d")
+                            except:
+                                receipt_data["transaction_date"] = datetime.now()
+                    else:
+                        receipt_data["transaction_date"] = datetime.now()  # Provide default
                     
                     add_receipt_transaction(receipt_data)
                     logger.info(f"Successfully processed and stored receipt: {filename}")

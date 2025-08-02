@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, field_validator
-from typing import List, Optional
+from typing import List, Optional, Union
 from datetime import date, datetime
 import re
 
@@ -7,7 +7,7 @@ class ReceiptData(BaseModel):
     """
     Pydantic model for validating the structure and data types of extracted receipt data.
     """
-    date: Optional[date] = None
+    receipt_date: Optional[Union[str, date, datetime]] = None
     vendor: Optional[str] = None
     amount: Optional[float] = Field(None, alias='amount')
     tax: Optional[float] = None
@@ -15,7 +15,7 @@ class ReceiptData(BaseModel):
     items: List[str] = []
     payment_method: Optional[str] = None
 
-    @field_validator('date', mode='before')
+    @field_validator('receipt_date', mode='before')
     @classmethod
     def parse_date(cls, value):
         if isinstance(value, str):

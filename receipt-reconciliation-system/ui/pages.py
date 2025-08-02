@@ -264,8 +264,11 @@ class ReceiptReconciliationApp:
             st.markdown("### 📊 Extracted Data:")
             for i, receipt in enumerate(processed_receipts, 1):
                 with st.expander(f"Receipt {i}: {receipt.get('vendor_name', 'Unknown Vendor')}", expanded=True):
+                    transaction_date = receipt.get('transaction_date')
+                    date_str = str(transaction_date).split('T')[0] if transaction_date else None
+                    
                     formatted_data = {
-                        "date": receipt.get('transaction_date', '').split('T')[0] if receipt.get('transaction_date') else None,
+                        "date": date_str,
                         "vendor": receipt.get('vendor_name'),
                         "amount": receipt.get('amount'),
                         "category": receipt.get('category', 'retail'),
