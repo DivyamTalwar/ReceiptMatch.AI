@@ -192,6 +192,12 @@ class ReceiptReconciliationApp:
 
             if st.button("Process Bank Statement"):
                 with st.spinner("Processing bank statement..."):
+                    total_transactions = len(df)
+                    total_debits = df[df[amount_col] < 0][amount_col].sum()
+                    total_credits = df[df[amount_col] > 0][amount_col].sum()
+                    net_amount = df[amount_col].sum()
+                    date_range = f"{pd.to_datetime(df[date_col]).min().date()} to {pd.to_datetime(df[date_col]).max().date()}"
+
                     for index, row in df.iterrows():
                         transaction_id = GeneralHelpers.generate_unique_id("bank")
                         bank_data = {
@@ -204,7 +210,20 @@ class ReceiptReconciliationApp:
                             "upload_batch_id": uploaded_file.name
                         }
                         add_bank_transaction(bank_data)
+                    
                     st.success("Bank statement processed successfully!")
+                    
+                    st.markdown("### Upload Summary")
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.metric("Total Transactions", total_transactions)
+                        st.metric("Date Range", date_range)
+                    with col2:
+                        st.metric("Total Debits", f"${total_debits:,.2f}")
+                        st.metric("Total Credits", f"${total_credits:,.2f}")
+                    st.metric("Net Amount", f"${net_amount:,.2f}")
+                    
+                    st.info("💾 All transactions saved to database!")
 
     def reconciliation_page(self):
         st.title("🔄 Reconciliation")
