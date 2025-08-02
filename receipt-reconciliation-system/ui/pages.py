@@ -131,7 +131,9 @@ class ReceiptReconciliationApp:
 
                 with st.spinner(f"Processing {uploaded_file.name}..."):
                     pdf_processor = ReceiptPDFProcessor()
-                    result = pdf_processor.process_receipt(file_path)
+                    
+                    # 🚀 USE BYPASS CLEANING FOR MANUAL UPLOADS
+                    result = pdf_processor.process_receipt(file_path, bypass_cleaning=True)
 
                     if "error" not in result:
                         st.success(f"Successfully processed {uploaded_file.name}")
@@ -139,7 +141,7 @@ class ReceiptReconciliationApp:
                         transaction_id = GeneralHelpers.generate_unique_id("receipt")
                         receipt_data = {
                             "transaction_id": transaction_id,
-                            "transaction_date": result.get("date"),
+                            "transaction_date": result.get("transaction_date"),  # Changed from "date"
                             "vendor_name": result.get("vendor"),
                             "amount": result.get("amount"),
                             "tax_amount": result.get("tax"),
@@ -151,18 +153,18 @@ class ReceiptReconciliationApp:
                             "processing_status": "processed",
                             "extracted_data": result
                         }
+
+                        # Ensure transaction_date is properly formatted
                         if receipt_data["transaction_date"]:
                             if isinstance(receipt_data["transaction_date"], str):
-                                # Parse string date to datetime
-                                from datetime import datetime
                                 try:
                                     receipt_data["transaction_date"] = datetime.strptime(receipt_data["transaction_date"], "%Y-%m-%d")
                                 except ValueError:
                                     receipt_data["transaction_date"] = datetime.now()
                             elif not isinstance(receipt_data["transaction_date"], datetime):
-                                receipt_data["transaction_date"] = datetime.combine(
-                                    receipt_data["transaction_date"], datetime.min.time()
-                                )
+                                receipt_data["transaction_date"] = datetime.now()
+                        else:
+                            receipt_data["transaction_date"] = datetime.now()  # Provide default
                         add_receipt_transaction(receipt_data)
                     else:
                         st.error(f"Failed to process {uploaded_file.name}. Error: {result['error']}")
