@@ -237,16 +237,86 @@ class ReceiptReconciliationApp:
                 bank_list = [json.loads(b.to_json()) for b in bank_transactions]
                 engine = AdvancedReconciliationEngine()
                 results = engine.reconcile_transactions(receipts_list, bank_list)
-                st.success("Reconciliation complete!")
-                st.subheader("Matches")
-                st.json(results["matches"])
-                st.subheader("Unmatched Receipts")
-                st.json(results["unmatched_ledger"])
-                st.subheader("Unmatched Bank Transactions")
-                st.json(results["unmatched_bank"])
+                self.display_reconciliation_results(results)
+
+    def display_reconciliation_results(self, results):
+        st.success("✅ Reconciliation complete!")
+        
+        # Summary metrics
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("🔗 Matches Found", len(results["matches"]))
+        with col2:
+            st.metric("📄 Unmatched Receipts", len(results["unmatched_ledger"]))
+        with col3:
+            st.metric("🏦 Unmatched Bank Transactions", len(results["unmatched_bank"]))
+        
+        # Enhanced matches display
+        if results["matches"]:
+            st.subheader("🔗 Transaction Matches")
+            for i, match in enumerate(results["matches"]):
+                with st.expander(f"Match {i+1}: {match['receipt'].get('vendor_name', 'Unknown')} ↔ {match['bank_transaction']['description']}", 
+                               expanded=False):
+                    
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        st.markdown("**📄 Receipt**")
+                        st.write(f"Vendor: {match['receipt'].get('vendor_name', 'Unknown')}")
+                        st.write(f"Amount: ${match['receipt'].get('amount', 0):.2f}")
+                        st.write(f"Date: {match['receipt'].get('transaction_date', 'Unknown')}")
+                        st.write(f"Confidence: {match['receipt'].get('extraction_confidence', 0):.1%}")
+                    
+                    with col2:
+                        st.markdown("**🏦 Bank Transaction**")
+                        st.write(f"Description: {match['bank_transaction']['description']}")
+                        st.write(f"Amount: ${match['bank_transaction']['amount']:.2f}")
+                        st.write(f"Date: {match['bank_transaction']['transaction_date']}")
+                        st.write(f"Type: {match['bank_transaction']['transaction_type'].title()}")
+                    
+                    # Match quality indicator
+                    confidence = match['confidence']
+                    if confidence > 0.9:
+                        st.success(f"🎯 Excellent Match ({confidence:.1%})")
+                    elif confidence > 0.7:
+                        st.warning(f"⚠️ Good Match ({confidence:.1%})")
+                    else:
+                        st.error(f"❌ Poor Match ({confidence:.1%})")
+        
+        # Show unmatched transactions in organized tables
+        if results["unmatched_ledger"]:
+            st.subheader("📄 Unmatched Receipts")
+            unmatched_receipts_df = pd.DataFrame([
+                {
+                    "Vendor": r.get('vendor_name', 'Unknown'),
+                    "Amount": f"${r.get('amount', 0):.2f}",
+                    "Date": str(r.get('transaction_date', 'Unknown'))[:10],
+                    "Confidence": f"{r.get('extraction_confidence', 0):.1%}",
+                    "File": r.get('receipt_filename', 'Unknown')
+                }
+                for r in results["unmatched_ledger"]
+            ])
+            st.dataframe(unmatched_receipts_df, use_container_width=True)
+        
+        if results["unmatched_bank"]:
+            st.subheader("🏦 Unmatched Bank Transactions") 
+            unmatched_bank_df = pd.DataFrame([
+                {
+                    "Description": b['description'],
+                    "Amount": f"${b['amount']:.2f}",
+                    "Date": str(b['transaction_date'])[:10],
+                    "Type": b['transaction_type'].title()
+                }
+                for b in results["unmatched_bank"]
+            ])
+            st.dataframe(unmatched_bank_df, use_container_width=True)
 
     def analytics_page(self):
         st.title("📊 Analytics")
+        
+        if st.button("Clean Up Duplicates"):
+            self.cleanup_duplicate_transactions()
+
         receipts = get_all_receipt_transactions()
         if not receipts:
             st.warning("No receipt data to analyze.")
@@ -304,3 +374,25 @@ class ReceiptReconciliationApp:
                     with col2:
                         st.write("**Processing Status:**", receipt.get('processing_status', 'processed').title())
                         st.write("**Confidence:**", f"{receipt.get('confidence', 0):.1%}")
+
+    def cleanup_duplicate_transactions(self):
+        """Remove duplicate bank transactions from multiple uploads"""
+        # Get all bank transactions
+        all_bank = get_all_bank_transactions()
+        
+        # Group by description + amount + date
+        seen = {}
+        duplicates = []
+        
+        for txn in all_bank:
+            key = (txn.description, txn.amount, txn.transaction_date)
+            if key in seen:
+                duplicates.append(txn.id)
+            else:
+                seen[key] = txn.id
+        
+        # Delete duplicates
+        if duplicates:
+            from mongoengine.queryset.visitor import Q
+            BankTransaction.objects(id__in=duplicates).delete()
+            st.info(f"Cleaned {len(duplicates)} duplicate transactions")

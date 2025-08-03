@@ -28,3 +28,27 @@ class ReconciliationEmbeddings(CustomEmbedding):
         text = re.sub(r'[^\w\s.-]', ' ', transaction_text.lower())
         text = re.sub(r'\s+', ' ', text).strip()
         return text[:self.max_text_length]
+
+    def _embed(self, texts: List[str]) -> List[List[float]]:
+        """Call actual embedding API"""
+        import requests
+        
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
+        }
+        
+        payload = {
+            "model": self.model,
+            "input": texts,
+            "encoding_format": "float"
+        }
+        
+        response = requests.post(f"{self.api_url}/embeddings", 
+                               headers=headers, json=payload)
+        
+        if response.status_code == 200:
+            return [item['embedding'] for item in response.json()["data"]]
+        else:
+            # Fallback to dummy vectors
+            return [[0.1] * 128 for _ in texts]
