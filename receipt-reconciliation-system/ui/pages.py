@@ -471,7 +471,7 @@ class ReceiptReconciliationApp:
                 except:
                     st.write("Could not display sample data")
 
-    def display_processing_progress(self, processed_receipts):
+    def display_processing_progress(self, pipeline_results):
         st.markdown("### 🔄 Processing emails...")
         progress_bar = st.progress(0)
         status_text = st.empty()
@@ -482,13 +482,40 @@ class ReceiptReconciliationApp:
             else:
                 status_text.text('Progress: ██████████ 100%')
         st.success("✅ Processing complete!")
+    
+        # 📊 REAL EMAIL PROCESSING STATISTICS
+        if isinstance(pipeline_results, dict) and 'stats' in pipeline_results:
+            # If pipeline returns statistics
+            stats = pipeline_results['stats']
+            processed_receipts = pipeline_results.get('receipts', [])
+            
+            total_emails = stats.get('total_emails', len(processed_receipts))
+            successful = stats.get('successful', len(processed_receipts))
+            failed = stats.get('failed', 0)
+        else:
+            # Fallback to current logic
+            processed_receipts = pipeline_results if isinstance(pipeline_results, list) else []
+            total_emails = len(processed_receipts)
+            successful = len(processed_receipts)
+            failed = 0
+        
         col1, col2, col3 = st.columns(3)
         with col1:
-            st.metric("📧 Total Emails", len(processed_receipts) + 2)
+            st.metric("📧 Total Emails", total_emails)
         with col2:
-            st.metric("✅ Processed", len(processed_receipts))
+            st.metric("✅ Processed", successful)
         with col3:
-            st.metric("❌ Failed", 2, help="No PDF attachments")
+            st.metric("❌ Failed", failed)
+            
+        # 📈 SUCCESS RATE INDICATOR
+        if total_emails > 0:
+            success_rate = (successful / total_emails) * 100
+            if success_rate == 100:
+                st.success(f"🎯 Perfect Success Rate: {success_rate:.0f}%")
+            elif success_rate >= 80:
+                st.info(f"✅ Good Success Rate: {success_rate:.1f}%")
+            else:
+                st.warning(f"⚠️ Success Rate: {success_rate:.1f}%")
 
     def display_extracted_data(self, processed_receipts):
         if processed_receipts:
