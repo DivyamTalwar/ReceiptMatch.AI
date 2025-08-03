@@ -422,14 +422,12 @@ class ReceiptPDFProcessor:
         
         # 🎯 ULTRA-SMART VENDOR PATTERNS
         vendor_patterns = [
-            r'(?:^|\n)\s*([A-Z][A-Z\s&]{2,40})(?:\s*#|\s*Store|\s*Market|\n)',  # Store names
-            r'Store[:\s]+([A-Za-z\s&]{3,40})',                                   # Store: Name
-            r'Merchant[:\s]+([A-Za-z\s&]{3,40})',                               # Merchant: Name
-            r'([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+Store',                       # Name Store
-            r'([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+Market',                      # Name Market
-            r'(?:^|\n)\s*([A-Z]{3,}[A-Z\s]*?)(?:\s|$)',                        # All caps names
-            r'([A-Za-z]{4,}(?:\s+[A-Za-z]{2,})*)',                             # General names
+            r'(?:^|\n)\s*([A-Z][A-Z\s&]{8,40})\s*(?:#|\n|Store)',  # Store names with numbers
+            r'(?:^|\n)\s*(AMAZON\.COM|WALMART|SHELL|CVS|TARGET|MCDONALD)',  # Specific store names
+            r'(?:^|\n)\s*([A-Z][A-Z\s&]{5,40})\s*(?:SUPERCENTER|STATION|PHARMACY)',  # With descriptors
         ]
+        
+        exclude_vendors = ['TAX', 'TOTAL', 'SUBTOTAL', 'PAYMENT', 'FUEL', 'USB', 'WIRELESS']
         
         vendor_candidates = []
         for pattern in vendor_patterns:
@@ -438,6 +436,7 @@ class ReceiptPDFProcessor:
                 vendor = match.strip()
                 if (len(vendor) > 2 and 
                     vendor not in ['PDF', 'Filter', 'FlateDecode', 'Length'] and
+                    vendor.upper() not in exclude_vendors and
                     not vendor.startswith('%') and
                     not re.match(r'^\d+$', vendor)):
                     vendor_candidates.append(vendor)
