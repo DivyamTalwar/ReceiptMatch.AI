@@ -6,18 +6,13 @@ from database.operations import add_receipt_transaction, add_processed_email, is
 from utils.helpers import GeneralHelpers
 from config.settings import AppSettings
 import os
-from datetime import datetime  # Added missing import
+from datetime import datetime 
 from asyncio_throttle import Throttler
 import logging
 
 logger = logging.getLogger(__name__)
 
 class EmailProcessingPipeline:
-    """
-    Manages the end-to-end pipeline for processing emails, extracting receipts,
-    and storing the data in the database, with rate limiting and persistent duplicate detection.
-    """
-
     def __init__(self, provider: str, email_address: str, password: str):
         self.email_service = EmailServiceManager()
         self.pdf_processor = ReceiptPDFProcessor()
@@ -26,24 +21,18 @@ class EmailProcessingPipeline:
         self.password = password
         self.download_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'receipts')
         
-        # Ensure download directory exists
         os.makedirs(self.download_path, exist_ok=True)
 
     async def run(self) -> List[Dict[str, Any]]:
-        """
-        Runs the complete email processing pipeline with rate limiting and persistent duplicate detection.
-        """
         processed_receipts = []
         
         try:
-            # Connect with better error handling
             logger.info("Connecting to email server...")
             connected = await self.email_service.connect(self.provider, self.email_address, self.password)
             if not connected:
                 logger.error("Failed to connect to email server. Aborting pipeline.")
                 return processed_receipts
 
-            # Fetch emails with better error handling
             logger.info("Fetching emails with PDF attachments...")
             emails = await self.email_service.fetch_emails_with_pdf()
             logger.info(f"Found {len(emails)} emails with PDF attachments.")
@@ -52,7 +41,6 @@ class EmailProcessingPipeline:
                 logger.info("No emails with PDF attachments found.")
                 return processed_receipts
 
-            # Process emails with throttling
             throttler = Throttler(AppSettings.MAX_EMAILS_PER_BATCH, 60.0)
 
             for email in emails:
@@ -73,7 +61,6 @@ class EmailProcessingPipeline:
         except Exception as e:
             logger.error(f"Error in email processing pipeline: {e}")
         finally:
-            # Always disconnect
             try:
                 await self.email_service.disconnect()
             except Exception as e:
@@ -83,15 +70,10 @@ class EmailProcessingPipeline:
         return processed_receipts
 
     async def process_single_email(self, email: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Processes a single email, including downloading attachments, processing PDFs,
-        and storing the results in the database.
-        """
         receipt_data = {}
         
         for attachment in email.get("attachments", []):
             try:
-                # 1. Download attachment
                 filename = GeneralHelpers.safe_filename(attachment["filename"])
                 filepath = os.path.join(self.download_path, filename)
                 
@@ -99,11 +81,9 @@ class EmailProcessingPipeline:
                     f.write(attachment["data"])
                 logger.info(f"Downloaded attachment: {filename}")
                 
-                # 2. Process the PDF
                 extracted_data = self.pdf_processor.process_receipt(filepath)
                 
                 if "error" not in extracted_data:
-                    # 3. Add metadata and store in the database
                     transaction_id = GeneralHelpers.generate_unique_id("receipt")
                     receipt_data = {
                         "transaction_id": transaction_id,
@@ -120,7 +100,6 @@ class EmailProcessingPipeline:
                         "extracted_data": extracted_data
                     }
                     
-                    # Convert date string to datetime object before saving
                     if receipt_data.get("transaction_date"):
                         if isinstance(receipt_data["transaction_date"], str):
                             try:
@@ -128,7 +107,7 @@ class EmailProcessingPipeline:
                             except:
                                 receipt_data["transaction_date"] = datetime.now()
                     else:
-                        receipt_data["transaction_date"] = datetime.now()  # Provide default
+                        receipt_data["transaction_date"] = datetime.now()
                     
                     add_receipt_transaction(receipt_data)
                     logger.info(f"Successfully processed and stored receipt: {filename}")

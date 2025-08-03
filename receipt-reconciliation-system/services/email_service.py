@@ -7,20 +7,11 @@ import aioimaplib
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 import logging
 
-# Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class EmailServiceManager:
-    """
-    Manages email integration for multiple providers to fetch and process receipt attachments.
-    Supports free email providers using standard IMAP protocols asynchronously.
-    """
-
     def __init__(self):
-        """
-        Initializes the EmailServiceManager with configurations for supported providers.
-        """
         self.supported_providers: Dict[str, Dict[str, Any]] = {
             'gmail': {'imap_server': 'imap.gmail.com', 'imap_port': 993},
             'outlook': {'imap_server': 'outlook.office365.com', 'imap_port': 993},
@@ -30,12 +21,10 @@ class EmailServiceManager:
         self.is_connected = False
 
     async def _check_connection(self) -> bool:
-        """Check if connection is still alive and valid."""
         if not self.connection or not self.is_connected:
             return False
         
         try:
-            # Try a simple NOOP command to check connection
             await self.connection.noop()
             return True
         except Exception as e:
@@ -50,14 +39,10 @@ class EmailServiceManager:
         retry=retry_if_exception_type((ConnectionError, OSError, aioimaplib.AioImapException))
     )
     async def connect(self, provider: str, email_address: str, password: str) -> bool:
-        """
-        Asynchronously connects to the specified email provider using IMAP with retry logic.
-        """
         if provider not in self.supported_providers:
             logger.error(f"Provider '{provider}' is not supported.")
             return False
 
-        # Clean up existing connection
         if self.connection:
             try:
                 await self.disconnect()
@@ -74,9 +59,8 @@ class EmailServiceManager:
             if login_result.result != 'OK':
                 raise ConnectionError(f"Login failed: {login_result.result}")
             
-            # Test connection with a simple command
             await self.connection.noop()
-            await asyncio.sleep(1)  # Add a small delay to ensure the connection is fully established
+            await asyncio.sleep(1) 
             
             self.is_connected = True
             logger.info(f"Successfully connected to {provider}.")
@@ -86,12 +70,9 @@ class EmailServiceManager:
             logger.error(f"Error connecting to {provider}: {e}")
             self.is_connected = False
             self.connection = None
-            raise  # Reraise exception to trigger tenacity's retry mechanism
+            raise 
 
     async def disconnect(self):
-        """
-        Asynchronously disconnects from the IMAP server.
-        """
         if self.connection:
             try:
                 await self.connection.logout()
@@ -103,9 +84,6 @@ class EmailServiceManager:
                 self.is_connected = False
 
     async def list_folders(self) -> List[str]:
-        """
-        Lists all folders in the mailbox.
-        """
         if not await self._check_connection():
             raise ConnectionError("Not connected to email server or connection lost")
 
@@ -129,10 +107,6 @@ class EmailServiceManager:
         retry=retry_if_exception_type((ConnectionError, OSError, aioimaplib.AioImapException))
     )
     async def fetch_emails_with_pdf(self, folder: str = 'INBOX', search_criteria: str = 'UNSEEN') -> List[Dict[str, Any]]:
-        """
-        Asynchronously fetches emails from a specified folder that contain PDF attachments, with retry logic.
-        """
-        # Check connection before proceeding
         if not await self._check_connection():
             raise ConnectionError("Not connected to email server or connection lost")
 
@@ -148,12 +122,10 @@ class EmailServiceManager:
                 logger.warning(f"Search returned: {search_result.result}")
                 return []
 
-            # Handle empty search results
             if not search_result.lines or not search_result.lines[0]:
                 logger.info("No emails found matching criteria.")
                 return []
 
-            # Parse email IDs
             email_ids_str = search_result.lines[0]
             if isinstance(email_ids_str, bytes):
                 email_ids_str = email_ids_str.decode()
@@ -169,14 +141,12 @@ class EmailServiceManager:
                     fetch_result = await self.connection.fetch(email_id, '(RFC822)')
                     
                     if fetch_result.result == 'OK' and fetch_result.lines:
-                        # Parse the email message
                         raw_email = fetch_result.lines[1] if len(fetch_result.lines) > 1 else fetch_result.lines[0]
                         if isinstance(raw_email, str):
                             raw_email = raw_email.encode()
                         
                         msg = email.message_from_bytes(raw_email)
                         
-                        # Decode subject
                         subject = "No Subject"
                         if msg.get("Subject"):
                             subject_header = decode_header(msg["Subject"])[0]
@@ -193,7 +163,6 @@ class EmailServiceManager:
                             "attachments": []
                         }
 
-                        # Process multipart messages for PDF attachments
                         if msg.is_multipart():
                             for part in msg.walk():
                                 content_disposition = str(part.get("Content-Disposition", ""))
@@ -210,7 +179,6 @@ class EmailServiceManager:
                                             })
                                             logger.info(f"Found PDF attachment: {filename}")
                         
-                        # Only include emails with PDF attachments
                         if email_details["attachments"]:
                             fetched_emails.append(email_details)
                             logger.info(f"Added email with {len(email_details['attachments'])} PDF attachments")
@@ -224,14 +192,10 @@ class EmailServiceManager:
 
         except Exception as e:
             logger.error(f"Error in fetch_emails_with_pdf: {e}")
-            # Reset connection state on error
             self.is_connected = False
-            raise  # Reraise to trigger tenacity
+            raise 
 
     async def download_attachments(self, emails: List[Dict[str, Any]], download_path: str):
-        """
-        Asynchronously downloads PDF attachments from fetched emails to a specified directory.
-        """
         if not os.path.exists(download_path):
             os.makedirs(download_path)
 

@@ -74,15 +74,14 @@ class ReceiptPDFProcessor:
                 response_text = ""
             
             if response_text.strip():
-                logger.info("🔧 Using LLM response for extraction")
+                logger.info("Using LLM response for extraction")
                 extracted_data = self._manual_json_construction(response_text)
             else:
-                logger.info("🔧 Using direct text analysis (no LLM response)")
-                extracted_data = self._manual_json_construction(cleaned_text[:5000])  # Use first 5000 chars
+                logger.info("Using direct text analysis (no LLM response)")
+                extracted_data = self._manual_json_construction(cleaned_text[:5000]) 
             
-            logger.info(f"✅ Data extraction successful: {extracted_data}")
+            logger.info(f" Data extraction successful: {extracted_data}")
             
-            # Validate and clean the data using the Pydantic model
             try:
                 prepared_data = self._prepare_for_validation(extracted_data)
                 validated_data = ReceiptData(**prepared_data)
@@ -109,16 +108,13 @@ class ReceiptPDFProcessor:
             }
         
     def _clean_receipt_text(self, text: str) -> str:
-        """Extract meaningful receipt content from PDF text."""
         import re
         
-        # Split into lines and filter for receipt-like content
         lines = text.split('\n')
         meaningful_lines = []
         
         for line in lines:
             line = line.strip()
-            # Keep lines that look like receipt content
             if (len(line) > 3 and 
                 not line.startswith('%PDF') and
                 not re.match(r'^/\w+', line) and
@@ -131,7 +127,7 @@ class ReceiptPDFProcessor:
 
     def _extract_text_with_fallbacks(self, pdf_path: str) -> str:
         try:
-            logger.info("🔧 Trying SimpleDirectoryReader")
+            logger.info("Trying SimpleDirectoryReader")
             documents = SimpleDirectoryReader(input_files=[pdf_path]).load_data()
             if documents and len(documents) > 0:
                 text = documents[0].text
@@ -143,7 +139,7 @@ class ReceiptPDFProcessor:
             logger.error(f"SimpleDirectoryReader failed: {e}")
         
         try:
-            logger.info("🔧 Trying PyPDF2...")
+            logger.info("Trying PyPDF2")
             import PyPDF2
             with open(pdf_path, 'rb') as file:
                 pdf_reader = PyPDF2.PdfReader(file)
@@ -153,15 +149,14 @@ class ReceiptPDFProcessor:
                     if page_text:
                         text += page_text + "\n"
                 if len(text.strip()) > 100:
-                    logger.info(f"✅ PyPDF2 success: {len(text)} characters")
+                    logger.info(f"PyPDF2 success: {len(text)} characters")
                     return text
-            logger.warning("❌ PyPDF2 returned insufficient content")
+            logger.warning("PyPDF2 returned insufficient content")
         except Exception as e:
-            logger.error(f"❌ PyPDF2 failed: {e}")
+            logger.error(f"PyPDF2 failed: {e}")
         
-        # Method 3: Try pdfplumber
         try:
-            logger.info("🔧 Trying pdfplumber...")
+            logger.info("Trying pdfplumber")
             import pdfplumber
             with pdfplumber.open(pdf_path) as pdf:
                 text = ""
@@ -170,102 +165,86 @@ class ReceiptPDFProcessor:
                     if page_text:
                         text += page_text + "\n"
                 if len(text.strip()) > 100:
-                    logger.info(f"✅ pdfplumber success: {len(text)} characters")
+                    logger.info(f"pdfplumber success: {len(text)} characters")
                     return text
-            logger.warning("❌ pdfplumber returned insufficient content")
+            logger.warning("pdfplumber returned insufficient content")
         except Exception as e:
-            logger.error(f"❌ pdfplumber failed: {e}")
+            logger.error(f"pdfplumber failed: {e}")
         
-        # Method 4: 🔥 OCR EXTRACTION (THE GAME CHANGER!)
         try:
-            logger.info("🔧 Trying OCR extraction (Tesseract)...")
+            logger.info("Trying OCR extraction (Tesseract)")
             import pytesseract
             from pdf2image import convert_from_path
             
-            # Convert PDF to images
             images = convert_from_path(pdf_path)
             text = ""
             
             for i, image in enumerate(images):
-                logger.info(f"🔧 Processing page {i+1} with OCR...")
+                logger.info(f"Processing page {i+1} with OCR")
                 page_text = pytesseract.image_to_string(image)
                 if page_text and len(page_text.strip()) > 10:
                     text += page_text + "\n"
             
             if len(text.strip()) > 100:
-                logger.info(f"✅ OCR extraction success: {len(text)} characters")
+                logger.info(f"OCR extraction success: {len(text)} characters")
                 logger.info(f"OCR text preview: {text[:200]}")
                 return text
-            logger.warning("❌ OCR returned insufficient content")
+            logger.warning("OCR returned insufficient content")
         except Exception as e:
-            logger.error(f"❌ OCR extraction failed: {e}")
-            logger.info("💡 Install OCR dependencies: pip install pytesseract pdf2image")
-        
-        # Method 5: Enhanced binary extraction (your current working method)
+            logger.error(f"OCR extraction failed: {e}")        
         try:
-            logger.info("🔧 Trying enhanced binary extraction...")
+            logger.info("Trying enhanced binary extraction")
             with open(pdf_path, 'rb') as file:
                 binary_content = file.read()
-                # Enhanced patterns for readable text
                 import re
                 text_matches = re.findall(rb'[A-Za-z0-9\s\$\.\,\-\:\#]{8,}', binary_content)
                 if text_matches:
                     text = ' '.join([match.decode('utf-8', errors='ignore') for match in text_matches])
-                    # Clean up PDF metadata
                     text = re.sub(r'%PDF.*?endobj', '', text, flags=re.DOTALL)
                     text = re.sub(r'<<.*?>>', '', text)
                     text = re.sub(r'/\w+\s+\d+', '', text)
                     
                     if len(text.strip()) > 50:
-                        logger.info(f"✅ Enhanced binary extraction success: {len(text)} characters")
+                        logger.info(f"Enhanced binary extraction success: {len(text)} characters")
                         return text
-            logger.warning("❌ Enhanced binary extraction found insufficient content")
+            logger.warning("Enhanced binary extraction found insufficient content")
         except Exception as e:
-            logger.error(f"❌ Enhanced binary extraction failed: {e}")
+            logger.error(f"Enhanced binary extraction failed: {e}")
         
-        # Final fallback
-        logger.error("❌ All extraction methods failed - using minimal fallback")
+        logger.error("All extraction methods failed - using minimal fallback")
         return "Receipt processing failed - manual review required"
 
     def get_database_ready_data(self, validated_data_dict: dict) -> dict:
-        """Convert validated data to database-ready format."""
-        # Map 'date' to 'transaction_date' for database compatibility
         if 'date' in validated_data_dict:
             validated_data_dict['transaction_date'] = validated_data_dict['date']
         
         return validated_data_dict
 
     def _prepare_for_validation(self, extracted_data: dict) -> dict:
-        """Prepare extracted data for Pydantic validation."""
-        # Ensure date is string format for validation
         if extracted_data.get('date') and not isinstance(extracted_data['date'], str):
             if hasattr(extracted_data['date'], 'strftime'):
                 extracted_data['date'] = extracted_data['date'].strftime('%Y-%m-%d')
             else:
                 extracted_data['date'] = str(extracted_data['date'])
         
-        # Ensure amount is float
         if extracted_data.get('amount'):
             extracted_data['amount'] = float(extracted_data['amount'])
         
-        # Ensure tax is float  
         if extracted_data.get('tax'):
             extracted_data['tax'] = float(extracted_data['tax'])
             
         return extracted_data
 
     def _calculate_confidence(self, extracted_data: dict) -> float:
-        """ULTIMATE confidence calculation considering all fields."""
         if not extracted_data or 'error' in extracted_data:
             return 0.0
 
-        # 🎯 WEIGHTED SCORING SYSTEM
         scores = {
-            "date": 0.0,      # 25% weight
-            "vendor": 0.0,    # 35% weight  
-            "amount": 0.0,    # 35% weight
-            "tax": 0.0,       # 3% weight
-            "items": 0.0,     # 2% weight
+            "date": 0.0,     
+            "vendor": 0.0,   
+            "amount": 0.0,   
+            "tax": 0.0,      
+            "items": 0.0,    
         }
         
         weights = {
@@ -276,16 +255,14 @@ class ReceiptPDFProcessor:
             "items": 0.02,
         }
         
-        # Score date
         if extracted_data.get('date'):
             date_val = extracted_data['date']
-            if isinstance(date_val, str) and len(date_val) >= 8:  # Reasonable date length
-                if date_val != "2025-08-03":  # Not default
+            if isinstance(date_val, str) and len(date_val) >= 8: 
+                if date_val != "2025-08-03":
                     scores["date"] = 1.0
                 else:
-                    scores["date"] = 0.3  # Partial credit for default
+                    scores["date"] = 0.3 
         
-        # Score vendor
         if extracted_data.get('vendor'):
             vendor = extracted_data['vendor']
             if isinstance(vendor, str):
@@ -293,49 +270,43 @@ class ReceiptPDFProcessor:
                     if len(vendor) > 3 and not vendor.startswith('PDF'):
                         scores["vendor"] = 1.0
                     else:
-                        scores["vendor"] = 0.4  # Partial credit
+                        scores["vendor"] = 0.4 
                 else:
-                    scores["vendor"] = 0.1  # Minimal credit for default
+                    scores["vendor"] = 0.1  
         
-        # Score amount
         if extracted_data.get('amount'):
             amount = extracted_data['amount']
             if isinstance(amount, (int, float)) and amount > 0:
                 scores["amount"] = 1.0
             else:
-                scores["amount"] = 0.1  # Minimal credit for zero
+                scores["amount"] = 0.1 
         
-        # Score tax
         if extracted_data.get('tax') and isinstance(extracted_data['tax'], (int, float)):
             if extracted_data['tax'] > 0:
                 scores["tax"] = 1.0
         
-        # Score items
         if extracted_data.get('items') and isinstance(extracted_data['items'], list):
             if len(extracted_data['items']) > 0:
                 scores["items"] = 1.0
         
-        # Calculate weighted score
         total_score = sum(scores[field] * weights[field] for field in scores)
         
-        logger.info(f"🎯 Confidence breakdown: {scores}")
-        logger.info(f"🎯 Weighted total: {total_score:.3f}")
+        logger.info(f"Confidence breakdown: {scores}")
+        logger.info(f"Weighted total: {total_score:.3f}")
         
         return total_score
 
     def _manual_json_construction(self, text: str) -> dict:
-        """ULTIMATE manual JSON construction with enhanced patterns."""
         import re
         from datetime import datetime
         
-        logger.info("🔧 Using ULTIMATE manual JSON construction...")
+        logger.info("Using ULTIMATE manual JSON construction")
         
-        # 📊 DEBUG: Show what we're working with
-        logger.info(f"🔍 Text length: {len(text)} characters")
-        logger.info(f"🔍 Text preview: {text[:300]}")
+        logger.info(f"Text length: {len(text)} characters")
+        logger.info(f"Text preview: {text[:300]}")
         
         result = {
-            "date": datetime.now().strftime('%Y-%m-%d'),  # Better default
+            "date": datetime.now().strftime('%Y-%m-%d'),
             "vendor": "Unknown Store",
             "amount": 0.0,
             "tax": 0.0,
@@ -344,14 +315,13 @@ class ReceiptPDFProcessor:
             "payment_method": "unknown"
         }
         
-        # 🎯 ENHANCED DATE PATTERNS
         date_patterns = [
-            r'\b(\d{4}-\d{2}-\d{2})\b',                    # 2025-01-15
-            r'\b(\d{1,2}[/-]\d{1,2}[/-]\d{4})\b',         # 1/15/2025
-            r'\b(\d{1,2}[/-]\d{1,2}[/-]\d{2})\b',         # 1/15/25
-            r'(\w{3,9}\s+\d{1,2},?\s+\d{4})',             # January 15, 2025
-            r'Date[:\s]+(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})', # Date: 1/15/25
-            r'(\d{1,2}/\d{1,2}/\d{2,4})',                 # Flexible format
+            r'\b(\d{4}-\d{2}-\d{2})\b',                   
+            r'\b(\d{1,2}[/-]\d{1,2}[/-]\d{4})\b',         
+            r'\b(\d{1,2}[/-]\d{1,2}[/-]\d{2})\b',         
+            r'(\w{3,9}\s+\d{1,2},?\s+\d{4})',             
+            r'Date[:\s]+(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})', 
+            r'(\d{1,2}/\d{1,2}/\d{2,4})',                 
         ]
         
         for pattern in date_patterns:
@@ -363,7 +333,7 @@ class ReceiptPDFProcessor:
                         try:
                             parsed_date = datetime.strptime(date_str, fmt)
                             result["date"] = parsed_date.strftime('%Y-%m-%d')
-                            logger.info(f"✅ Date extracted: {result['date']}")
+                            logger.info(f"Date extracted: {result['date']}")
                             break
                         except:
                             continue
@@ -373,17 +343,16 @@ class ReceiptPDFProcessor:
                     result["date"] = date_str
                     break
         
-        # 🎯 ENHANCED AMOUNT PATTERNS (More Aggressive)
         amount_patterns = [
             r'TOTAL[:\s]*\$?(\d+\.\d{2})',
             r'AMOUNT[:\s]*\$?(\d+\.\d{2})',
             r'SUBTOTAL[:\s]*\$?(\d+\.\d{2})',
             r'GRAND TOTAL[:\s]*\$?(\d+\.\d{2})',
             r'\$(\d+\.\d{2})\s*(?:total|amount|due)',
-            r'\$(\d{1,4}\.\d{2})',                         # Any reasonable dollar amount
+            r'\$(\d{1,4}\.\d{2})',                        
             r'(\d{1,4}\.\d{2})\s*(?:USD|usd|\$)',
             r'Total:\s*(\d+\.\d{2})',
-            r'(\d+\.\d{2})\s*$',                           # Last decimal on line
+            r'(\d+\.\d{2})\s*$',                          
         ]
         
         all_amounts = []
@@ -392,21 +361,19 @@ class ReceiptPDFProcessor:
             for match in matches:
                 try:
                     amount = float(match)
-                    if 0.01 <= amount <= 10000:  # Reasonable range
+                    if 0.01 <= amount <= 10000: 
                         all_amounts.append(amount)
                 except:
                     continue
         
         if all_amounts:
-            # Use the largest reasonable amount (likely the total)
             result["amount"] = max(all_amounts)
-            logger.info(f"✅ Amount extracted: ${result['amount']}")
+            logger.info(f"Amount extracted: ${result['amount']}")
         
-        # 🎯 ULTRA-SMART VENDOR PATTERNS
         vendor_patterns = [
-            r'(?:^|\n)\s*([A-Z][A-Z\s&]{8,40})\s*(?:#|\n|Store)',  # Store names with numbers
-            r'(?:^|\n)\s*(AMAZON\.COM|WALMART|SHELL|CVS|TARGET|MCDONALD)',  # Specific store names
-            r'(?:^|\n)\s*([A-Z][A-Z\s&]{5,40})\s*(?:SUPERCENTER|STATION|PHARMACY)',  # With descriptors
+            r'(?:^|\n)\s*([A-Z][A-Z\s&]{8,40})\s*(?:#|\n|Store)',  
+            r'(?:^|\n)\s*(AMAZON\.COM|WALMART|SHELL|CVS|TARGET|MCDONALD)', 
+            r'(?:^|\n)\s*([A-Z][A-Z\s&]{5,40})\s*(?:SUPERCENTER|STATION|PHARMACY)', 
         ]
         
         exclude_vendors = ['TAX', 'TOTAL', 'SUBTOTAL', 'PAYMENT', 'FUEL', 'USB', 'WIRELESS']
@@ -423,19 +390,15 @@ class ReceiptPDFProcessor:
                     not re.match(r'^\d+$', vendor)):
                     vendor_candidates.append(vendor)
         
-        # Choose best vendor candidate
         if vendor_candidates:
-            # Prefer shorter, more reasonable names
             best_vendor = min(vendor_candidates, key=len)
             if len(best_vendor) <= 50:
                 result["vendor"] = best_vendor
-                logger.info(f"✅ Vendor extracted: {result['vendor']}")
+                logger.info(f"Vendor extracted: {result['vendor']}")
         
-        # 🎯 FALLBACK VENDOR EXTRACTION
         if result["vendor"] == "Unknown Store":
             lines = [line.strip() for line in text.split('\n') if line.strip()]
-            for line in lines[:15]:  # Check first 15 lines
-                # Skip obvious junk
+            for line in lines[:15]:
                 if (len(line) > 2 and len(line) < 50 and
                     not line.startswith(('%', '/', '<', '>')) and
                     not re.match(r'^\d+', line) and
@@ -443,10 +406,8 @@ class ReceiptPDFProcessor:
                     re.search(r'[A-Za-z]', line)):
                     
                     result["vendor"] = line[:50]
-                    logger.info(f"✅ Fallback vendor extracted: {result['vendor']}")
+                    logger.info(f"Fallback vendor extracted: {result['vendor']}")
                     break
-        
-        # 🎯 ENHANCED TAX PATTERNS
         tax_patterns = [
             r'TAX[:\s]*\$?(\d+\.\d{2})',
             r'SALES TAX[:\s]*\$?(\d+\.\d{2})',
@@ -459,17 +420,16 @@ class ReceiptPDFProcessor:
             if match:
                 try:
                     tax_amount = float(match.group(1))
-                    if 0 < tax_amount < result["amount"] * 0.2:  # Reasonable tax (< 20%)
+                    if 0 < tax_amount < result["amount"] * 0.2:
                         result["tax"] = tax_amount
-                        logger.info(f"✅ Tax extracted: ${result['tax']}")
+                        logger.info(f"Tax extracted: ${result['tax']}")
                         break
                 except:
                     continue
         
-        # 🎯 EXTRACT ITEMS
         item_patterns = [
-            r'(?:^|\n)\s*([A-Za-z][A-Za-z\s]{3,30})\s+\$?\d+\.\d{2}',  # Item name followed by price
-            r'\d+\s+([A-Za-z][A-Za-z\s]{3,30})\s+\$?\d+\.\d{2}',      # Qty Item Price
+            r'(?:^|\n)\s*([A-Za-z][A-Za-z\s]{3,30})\s+\$?\d+\.\d{2}',
+            r'\d+\s+([A-Za-z][A-Za-z\s]{3,30})\s+\$?\d+\.\d{2}',     
         ]
         
         items = []
@@ -481,11 +441,11 @@ class ReceiptPDFProcessor:
                     items.append(item)
         
         if items:
-            result["items"] = items[:5]  # Limit to 5 items
-            logger.info(f"✅ Items extracted: {result['items']}")
+            result["items"] = items[:5]
+            logger.info(f"Items extracted: {result['items']}")
         
         result["category"] = self._categorize_transaction(result["vendor"], result["items"])
-        logger.info(f"🎯 ULTIMATE extraction result: {result}")
+        logger.info(f"ULTIMATE extraction result: {result}")
         return result
 
     def _categorize_transaction(self, vendor, items):

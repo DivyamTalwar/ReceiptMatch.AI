@@ -12,9 +12,7 @@ import asyncio
 dotenv_path = os.path.join(os.path.dirname(__file__), '..', '..', '.env')
 load_dotenv(dotenv_path=dotenv_path)
 
-class CustomLLMWrapper(CustomLLM):
-    """LlamaIndex-compatible wrapper for your custom LLM"""
-    
+class CustomLLMWrapper(CustomLLM):    
     model_name: str = "custom_llm"
     temperature: float = 0.1
     max_tokens: int = 4096
@@ -59,7 +57,6 @@ class CustomLLMWrapper(CustomLLM):
                     response_text = data["choices"][0]["message"]["content"]
                     return CompletionResponse(text=response_text)
             except Exception as e:
-                # Robust error handling
                 return CompletionResponse(text=f"Error: {str(e)}")
 
     def stream_complete(self, prompt: str, **kwargs) -> CompletionResponseGen:
