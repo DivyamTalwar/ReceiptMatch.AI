@@ -16,35 +16,27 @@ class ReceiptPDFProcessor:
         
     
     def process_receipt(self, pdf_path: str, bypass_cleaning: bool = False) -> dict:
-        """Process receipt, extract data, and validate it using Pydantic - BULLETPROOF VERSION."""
         try:
             logger.info(f"Processing PDF: {pdf_path}")
             
-            # 🔧 ENHANCED PDF TEXT EXTRACTION WITH MULTIPLE METHODS
             text_content = self._extract_text_with_fallbacks(pdf_path)
             
             logger.info(f"Extracted {len(text_content)} characters from PDF")
             
-            # 🚀 BYPASS CLEANING LOGIC HERE
             if bypass_cleaning:
-                logger.info("🚀 Bypassing text cleaning for manual upload...")
-                # Use raw text directly - just take first 10k characters to avoid memory issues
+                logger.info("Bypassing text cleaning for manual upload")
                 cleaned_text = text_content[:10000]
             else:
-                logger.info("🔧 Using enhanced text cleaning for email processing...")
+                logger.info("Using enhanced text cleaning for email processing")
                 cleaned_text = self._clean_receipt_text(text_content)
             
-            # 🎯 SKIP CHARACTER VALIDATION FOR MANUAL UPLOADS
             if not bypass_cleaning:
-                # Only validate for email processing
                 if not cleaned_text or len(cleaned_text.strip()) < 10:
                     logger.warning(f"Insufficient text extracted from PDF: {len(cleaned_text)} characters (min: 10)")
                     return {'error': 'Insufficient text content in PDF', 'confidence': 0.0}
 
-            # For manual uploads (bypass_cleaning=True), always proceed regardless of text length
             logger.info(f"Processing with {len(cleaned_text)} characters of text")
             
-            # Build prompt safely without .format() method
             prompt = f"""
             Extract receipt information from the text below and return ONLY a valid JSON object.
 
@@ -61,36 +53,31 @@ class ReceiptPDFProcessor:
             Receipt text: {cleaned_text}
             """
             
-            # BULLETPROOF LLM COMPLETION WITH EXCEPTION HANDLING
             try:
-                logger.info("🚀 Attempting LLM completion...")
-                # Ensure proper LLM call without context manager issues
+                logger.info("Attempting LLM completion")
                 if hasattr(self.llm, 'complete'):
                     response = self.llm.complete(prompt)
                 else:
-                    response = self.llm(prompt)  # Alternative calling method
+                    response = self.llm(prompt)
                 
-                # SAFELY extract response text FIRST, then log success
                 try:
                     response_text = str(response.text) if hasattr(response, 'text') else str(response)
-                    # NOW it's safe to log success with the extracted text
-                    logger.info(f"✅ LLM completion successful: {len(response_text)} characters")
+                    logger.info(f"LLM completion successful: {len(response_text)} characters")
                     logger.info(f"LLM response preview: {response_text[:200]}...")
                 except Exception as text_error:
-                    logger.error(f"❌ Failed to extract response text: {text_error}")
+                    logger.error(f"Failed to extract response text: {text_error}")
                     response_text = ""
                     
             except Exception as llm_error:
-                logger.error(f"❌ LLM completion failed: {llm_error}")
-                logger.info("🔄 Falling back to direct text analysis...")
-                response_text = ""  # Use empty response to trigger direct analysis
+                logger.error(f"LLM completion failed: {llm_error}")
+                logger.info("Falling back to direct text analysis")
+                response_text = ""
             
-            # If we have LLM response, try to parse it, otherwise use direct text analysis
             if response_text.strip():
-                logger.info("🔧 Using LLM response for extraction...")
+                logger.info("🔧 Using LLM response for extraction")
                 extracted_data = self._manual_json_construction(response_text)
             else:
-                logger.info("🔧 Using direct text analysis (no LLM response)...")
+                logger.info("🔧 Using direct text analysis (no LLM response)")
                 extracted_data = self._manual_json_construction(cleaned_text[:5000])  # Use first 5000 chars
             
             logger.info(f"✅ Data extraction successful: {extracted_data}")
@@ -136,30 +123,25 @@ class ReceiptPDFProcessor:
                 not line.startswith('%PDF') and
                 not re.match(r'^/\w+', line) and
                 not re.match(r'^\d+\s+\d+\s+obj', line) and
-                re.search(r'[a-zA-Z]', line)):  # Contains letters
+                re.search(r'[a-zA-Z]', line)):
                 meaningful_lines.append(line)
         
-        # Take first 100 meaningful lines
         cleaned_text = '\n'.join(meaningful_lines[:100])
         return cleaned_text
 
     def _extract_text_with_fallbacks(self, pdf_path: str) -> str:
-        """Extract text from PDF using multiple fallback methods INCLUDING OCR."""
-        
-        # Method 1: Try SimpleDirectoryReader (your current method)
         try:
-            logger.info("🔧 Trying SimpleDirectoryReader...")
+            logger.info("🔧 Trying SimpleDirectoryReader")
             documents = SimpleDirectoryReader(input_files=[pdf_path]).load_data()
             if documents and len(documents) > 0:
                 text = documents[0].text
-                if text and len(text.strip()) > 100:  # Increased threshold
-                    logger.info(f"✅ SimpleDirectoryReader success: {len(text)} characters")
+                if text and len(text.strip()) > 100: 
+                    logger.info(f"SimpleDirectoryReader success: {len(text)} characters")
                     return text
-            logger.warning("❌ SimpleDirectoryReader returned insufficient content")
+            logger.warning("SimpleDirectoryReader returned insufficient content")
         except Exception as e:
-            logger.error(f"❌ SimpleDirectoryReader failed: {e}")
+            logger.error(f"SimpleDirectoryReader failed: {e}")
         
-        # Method 2: Try PyPDF2
         try:
             logger.info("🔧 Trying PyPDF2...")
             import PyPDF2

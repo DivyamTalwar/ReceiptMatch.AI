@@ -15,10 +15,6 @@ from datetime import datetime
 import plotly.express as px
 
 class ReceiptReconciliationApp:
-    """
-    Main Streamlit application with comprehensive navigation and page management.
-    """
-    
     def __init__(self):
         connect_to_db()
         self.pages = {
@@ -46,19 +42,15 @@ class ReceiptReconciliationApp:
         self.pages[selected_page]()
 
     def _display_system_status(self):
-        """
-        Displays the current status of the system's backend components.
-        """
         st.sidebar.subheader("System Status")
         if check_db_connection():
-            st.sidebar.success("✅ Database Connected")
+            st.sidebar.success("Database Connected")
         else:
-            st.sidebar.error("❌ Database Disconnected")
+            st.sidebar.error("Database Disconnected")
 
     def dashboard_page(self):
         st.title("🏠 Dashboard")
         
-        # Add reconciliation stats
         try:
             from services.reconciliation import AdvancedReconciliationEngine
             receipts = get_all_receipt_transactions()
@@ -151,7 +143,6 @@ class ReceiptReconciliationApp:
                 with st.spinner(f"Processing {uploaded_file.name}..."):
                     pdf_processor = ReceiptPDFProcessor()
                     
-                    # 🚀 USE BYPASS CLEANING FOR MANUAL UPLOADS
                     result = pdf_processor.process_receipt(file_path, bypass_cleaning=True)
 
                     if "error" not in result:
@@ -160,7 +151,7 @@ class ReceiptReconciliationApp:
                         transaction_id = GeneralHelpers.generate_unique_id("receipt")
                         receipt_data = {
                             "transaction_id": transaction_id,
-                            "transaction_date": result.get("transaction_date"),  # Changed from "date"
+                            "transaction_date": result.get("transaction_date"),
                             "vendor_name": result.get("vendor"),
                             "amount": result.get("amount"),
                             "tax_amount": result.get("tax"),
@@ -173,7 +164,6 @@ class ReceiptReconciliationApp:
                             "extracted_data": result
                         }
 
-                        # Ensure transaction_date is properly formatted
                         if receipt_data["transaction_date"]:
                             if isinstance(receipt_data["transaction_date"], str):
                                 try:
@@ -183,7 +173,7 @@ class ReceiptReconciliationApp:
                             elif not isinstance(receipt_data["transaction_date"], datetime):
                                 receipt_data["transaction_date"] = datetime.now()
                         else:
-                            receipt_data["transaction_date"] = datetime.now()  # Provide default
+                            receipt_data["transaction_date"] = datetime.now()
                         add_receipt_transaction(receipt_data)
                     else:
                         st.error(f"Failed to process {uploaded_file.name}. Error: {result['error']}")
@@ -259,7 +249,7 @@ class ReceiptReconciliationApp:
                 self.display_reconciliation_results(results)
 
     def display_reconciliation_results(self, results):
-        st.success("✅ Reconciliation complete!")
+        st.success("Reconciliation complete!")
         
         # Summary metrics
         col1, col2, col3 = st.columns(3)
@@ -337,26 +327,24 @@ class ReceiptReconciliationApp:
             try:
                 self.cleanup_duplicate_transactions()
             except Exception as e:
-                st.error(f"❌ Cleanup failed: {str(e)}")
+                st.error(f"Cleanup failed: {str(e)}")
 
         receipts = get_all_receipt_transactions()
         if not receipts:
             st.warning("No receipt data to analyze.")
-            st.info("💡 Upload some receipts first to see analytics!")
+            st.info("Upload some receipts first to see analytics!")
             return
         
         try:
-            # Convert to DataFrame
             df = pd.DataFrame([json.loads(r.to_json()) for r in receipts])
             
-            # 🔧 SAFE DATA CONVERSION with error handling
             def safe_convert_date(x):
                 try:
                     if isinstance(x, dict) and '$date' in x:
                         return pd.to_datetime(x['$date'], unit='ms')
                     return pd.to_datetime(x)
                 except:
-                    return pd.to_datetime('today')  # Fallback
+                    return pd.to_datetime('today')
             
             def safe_convert_amount(x):
                 try:
@@ -364,29 +352,25 @@ class ReceiptReconciliationApp:
                         return float(x['$numberDecimal'])
                     return float(x)
                 except:
-                    return 0.0  # Fallback
+                    return 0.0 
             
-            # Apply conversions
             df['transaction_date'] = df['transaction_date'].apply(safe_convert_date)
             df['amount'] = df['amount'].apply(safe_convert_amount)
             
-            # 🎯 CREATE CLEAN DATAFRAME with only needed columns
             clean_df = pd.DataFrame({
                 'transaction_date': df['transaction_date'],
                 'amount': df['amount'],
-                'category': df['category'].astype(str)  # Ensure string type
+                'category': df['category'].astype(str)
             })
             
-            # Remove any rows with invalid data
             clean_df = clean_df.dropna()
-            clean_df = clean_df[clean_df['amount'] > 0]  # Remove zero amounts
+            clean_df = clean_df[clean_df['amount'] > 0] 
             
             if len(clean_df) == 0:
                 st.warning("⚠️ No valid transaction data found for analytics.")
                 st.info("💡 Check your receipt data quality.")
                 return
             
-            # 📊 SPENDING OVER TIME (Enhanced Debug)
             st.subheader("📈 Spending Over Time")
             try:
                 monthly_spending = clean_df.groupby(
@@ -396,24 +380,23 @@ class ReceiptReconciliationApp:
                 st.write(f"**Debug Info:** {len(monthly_spending)} months of data found")
                 st.write("Monthly spending data:", monthly_spending)
                 
-                if len(monthly_spending) > 1:  # Need at least 2 points for a line
+                if len(monthly_spending) > 1:
                     st.line_chart(monthly_spending)
                 else:
                     st.info("📅 Need transactions from multiple months for time series.")
-                    st.bar_chart(monthly_spending)  # Show as bar chart instead
+                    st.bar_chart(monthly_spending) 
                     
             except Exception as e:
-                st.error(f"❌ Time series error: {str(e)}")
+                st.error(f"Time series error: {str(e)}")
 
-            # 📊 SPENDING BY CATEGORY (Enhanced Debug)  
-            st.subheader("🏷️ Spending by Category")
+            st.subheader("Spending by Category")
             try:
                 category_spending = clean_df.groupby('category')['amount'].sum()
                 
                 st.write(f"**Debug Info:** {len(category_spending)} categories found")
                 st.write("Category spending data:", category_spending)
                 
-                if len(category_spending) > 1:  # Need multiple categories
+                if len(category_spending) > 1: 
                     fig = px.pie(
                         values=category_spending.values,
                         names=category_spending.index,
@@ -427,7 +410,6 @@ class ReceiptReconciliationApp:
             except Exception as e:
                 st.error(f"❌ Category chart error: {str(e)}")
                 
-            # 📊 SUMMARY STATISTICS
             st.subheader("📋 Summary Statistics")
             col1, col2, col3, col4 = st.columns(4)
             
@@ -440,7 +422,6 @@ class ReceiptReconciliationApp:
             with col4:
                 st.metric("💳 Avg Transaction", f"${clean_df['amount'].mean():.2f}")
                 
-            # 📊 RECENT TRANSACTIONS TABLE
             st.subheader("🕒 Recent Transactions")
             recent_df = clean_df.sort_values('transaction_date', ascending=False).head(10)
             display_df = recent_df.copy()
@@ -457,10 +438,9 @@ class ReceiptReconciliationApp:
             )
             
         except Exception as e:
-            st.error(f"❌ Analytics processing failed: {str(e)}")
+            st.error(f"Analytics processing failed: {str(e)}")
             st.info("🔧 Try cleaning up duplicates first, or check your receipt data quality.")
             
-            # Debug information
             if st.checkbox("🔍 Show Debug Info"):
                 st.code(f"Error details: {str(e)}")
                 try:
@@ -472,7 +452,7 @@ class ReceiptReconciliationApp:
                     st.write("Could not display sample data")
 
     def display_processing_progress(self, pipeline_results):
-        st.markdown("### 🔄 Processing emails...")
+        st.markdown("### 🔄Processing emails...")
         progress_bar = st.progress(0)
         status_text = st.empty()
         for i in range(101):
@@ -481,11 +461,9 @@ class ReceiptReconciliationApp:
                 status_text.text(f'Progress: {"█" * (i//10)}{"░" * (10-i//10)} {i}%')
             else:
                 status_text.text('Progress: ██████████ 100%')
-        st.success("✅ Processing complete!")
+        st.success("Processing complete!")
     
-        # 📊 REAL EMAIL PROCESSING STATISTICS
         if isinstance(pipeline_results, dict) and 'stats' in pipeline_results:
-            # If pipeline returns statistics
             stats = pipeline_results['stats']
             processed_receipts = pipeline_results.get('receipts', [])
             
@@ -493,7 +471,6 @@ class ReceiptReconciliationApp:
             successful = stats.get('successful', len(processed_receipts))
             failed = stats.get('failed', 0)
         else:
-            # Fallback to current logic
             processed_receipts = pipeline_results if isinstance(pipeline_results, list) else []
             total_emails = len(processed_receipts)
             successful = len(processed_receipts)
@@ -503,19 +480,18 @@ class ReceiptReconciliationApp:
         with col1:
             st.metric("📧 Total Emails", total_emails)
         with col2:
-            st.metric("✅ Processed", successful)
+            st.metric("Processed", successful)
         with col3:
-            st.metric("❌ Failed", failed)
+            st.metric("Failed", failed)
             
-        # 📈 SUCCESS RATE INDICATOR
         if total_emails > 0:
             success_rate = (successful / total_emails) * 100
             if success_rate == 100:
                 st.success(f"🎯 Perfect Success Rate: {success_rate:.0f}%")
             elif success_rate >= 80:
-                st.info(f"✅ Good Success Rate: {success_rate:.1f}%")
+                st.info(f"Good Success Rate: {success_rate:.1f}%")
             else:
-                st.warning(f"⚠️ Success Rate: {success_rate:.1f}%")
+                st.warning(f"Success Rate: {success_rate:.1f}%")
 
     def display_extracted_data(self, processed_receipts):
         if processed_receipts:
@@ -543,24 +519,20 @@ class ReceiptReconciliationApp:
                         st.write("**Confidence:**", f"{receipt.get('confidence', 0):.1%}")
 
     def cleanup_duplicate_transactions(self):
-        """Remove duplicate bank transactions from multiple uploads"""
-        # Get all bank transactions
         all_bank = get_all_bank_transactions()
         
-        # Group by description + amount + date
         seen = {}
         duplicates = []
         
         for txn in all_bank:
             key = (txn.description, txn.amount, txn.transaction_date)
             if key in seen:
-                duplicates.append(txn.id)  # or txn._id depending on your model
+                duplicates.append(txn.id) 
             else:
-                seen[key] = txn.id  # or txn._id
+                seen[key] = txn.id 
         
-        # Delete duplicates
         if duplicates:
             BankTransaction.objects(id__in=duplicates).delete()
-            st.success(f"🗑️ Cleaned {len(duplicates)} duplicate transactions")
+            st.success(f"Cleaned {len(duplicates)} duplicate transactions")
         else:
-            st.info("✨ No duplicates found - database is clean!")
+            st.info("No duplicates found - database is clean!")

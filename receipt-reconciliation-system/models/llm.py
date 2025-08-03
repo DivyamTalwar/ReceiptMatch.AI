@@ -22,10 +22,6 @@ class CustomLLMWrapper(CustomLLM):
     
     def __init__(self):
         super().__init__()
-        # This is a placeholder for your actual custom model initialization
-        # In a real scenario, you would import and initialize your model here
-        # from .your_custom_llm import YourCustomLLM
-        # self.custom_model = YourCustomLLM()
         pass
 
     @property
@@ -44,7 +40,7 @@ class CustomLLMWrapper(CustomLLM):
 
     def _base_payload(self, prompt: str) -> Dict[str, Any]:
         return {
-            "model": "omega", # Assuming 'omega' is the model name for the API
+            "model": "omega",
             "messages": [{"role": "user", "content": prompt}],
             "max_tokens": self.max_tokens,
             "temperature": self.temperature,
@@ -53,7 +49,6 @@ class CustomLLMWrapper(CustomLLM):
         }
 
     def complete(self, prompt: str, **kwargs) -> CompletionResponse:
-        """CRITICAL: This method must return CompletionResponse, not string"""
         with llm_completion_callback():
             payload = self._base_payload(prompt)
             try:
@@ -68,7 +63,6 @@ class CustomLLMWrapper(CustomLLM):
                 return CompletionResponse(text=f"Error: {str(e)}")
 
     def stream_complete(self, prompt: str, **kwargs) -> CompletionResponseGen:
-        """Streaming support for better user experience"""
         with llm_completion_callback():
             payload = self._base_payload(prompt)
             payload["stream"] = True
@@ -97,8 +91,6 @@ class CustomLLMWrapper(CustomLLM):
     async def process_with_timeout(self, prompt: str, timeout: int = 45):
         """Process with timeout to prevent Streamlit timeouts"""
         try:
-            # Note: httpx already has a timeout, but this adds an outer layer
-            # for asyncio-specific timeout handling.
             async def _complete():
                 payload = self._base_payload(prompt)
                 async with httpx.AsyncClient(timeout=60.0) as client:

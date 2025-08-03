@@ -14,7 +14,7 @@ class ReceiptTransaction(Document):
     receipt_filename = StringField(required=True)
     receipt_path = StringField(required=True)
     extraction_confidence = DecimalField(min_value=0, max_value=1, precision=2)
-    extracted_data = DictField()  # Raw extracted data for debugging
+    extracted_data = DictField()
     processing_status = StringField(choices=['pending', 'processed', 'error'], default='pending')
     created_at = DateTimeField(default=datetime.utcnow)
     updated_at = DateTimeField(default=datetime.utcnow)
@@ -78,9 +78,6 @@ class ReconciliationMatch(Document):
     }
 
 class ProcessedEmail(Document):
-    """
-    Stores the message IDs of processed emails to prevent duplicates.
-    """
     message_id = StringField(unique=True, required=True)
     processed_at = DateTimeField(default=datetime.utcnow)
 

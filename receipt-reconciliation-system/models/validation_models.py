@@ -4,9 +4,6 @@ from datetime import date, datetime
 import re
 
 class ReceiptData(BaseModel):
-    """
-    Pydantic model for validating the structure and data types of extracted receipt data.
-    """
     receipt_date: Optional[Union[str, date, datetime]] = None
     vendor: Optional[str] = None
     amount: Optional[float] = Field(None, alias='amount')
@@ -19,13 +16,11 @@ class ReceiptData(BaseModel):
     @classmethod
     def parse_date(cls, value):
         if isinstance(value, str):
-            # Attempt to parse common date formats
             for fmt in ('%Y-%m-%d', '%m/%d/%Y', '%d/%m/%Y', '%b %d, %Y'):
                 try:
                     return datetime.strptime(value, fmt).date()
                 except ValueError:
                     pass
-            # Fallback for dates with text or different formats
             match = re.search(r'(\d{4}-\d{2}-\d{2})|(\d{2}/\d{2}/\d{4})', value)
             if match:
                 date_str = match.group(0)
@@ -39,7 +34,6 @@ class ReceiptData(BaseModel):
     @classmethod
     def parse_float(cls, value):
         if isinstance(value, str):
-            # Remove currency symbols, commas, and other non-numeric characters
             value = re.sub(r'[^\d.]', '', value)
             try:
                 return float(value)
