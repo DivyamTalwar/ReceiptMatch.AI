@@ -502,5 +502,23 @@ class ReceiptPDFProcessor:
             result["items"] = items[:5]  # Limit to 5 items
             logger.info(f"✅ Items extracted: {result['items']}")
         
+        result["category"] = self._categorize_transaction(result["vendor"], result["items"])
         logger.info(f"🎯 ULTIMATE extraction result: {result}")
         return result
+
+    def _categorize_transaction(self, vendor, items):
+        vendor_lower = vendor.lower()
+        items_text = ' '.join(items).lower()
+        
+        if any(word in vendor_lower for word in ['pharmacy', 'cvs', 'walgreens']):
+            return 'healthcare'
+        elif any(word in vendor_lower for word in ['shell', 'gas', 'fuel', 'station']):
+            return 'fuel'
+        elif any(word in vendor_lower for word in ['walmart', 'grocery', 'market']):
+            return 'grocery'
+        elif any(word in vendor_lower for word in ['amazon', 'online']):
+            return 'online'
+        elif any(word in vendor_lower for word in ['pizza', 'restaurant', 'mcdonald']):
+            return 'dining'
+        else:
+            return 'retail'

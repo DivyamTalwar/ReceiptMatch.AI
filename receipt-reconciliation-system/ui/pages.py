@@ -9,6 +9,7 @@ from services.email_pipeline import EmailProcessingPipeline
 from services.email_service import EmailServiceManager
 from services.pdf_processor import ReceiptPDFProcessor
 from database.operations import add_receipt_transaction, get_all_receipt_transactions, get_all_bank_transactions, add_bank_transaction
+from models.schema import BankTransaction
 from utils.helpers import GeneralHelpers
 from datetime import datetime
 import plotly.express as px
@@ -57,9 +58,27 @@ class ReceiptReconciliationApp:
     def dashboard_page(self):
         st.title("🏠 Dashboard")
         
+        # Add reconciliation stats
+        try:
+            from services.reconciliation import AdvancedReconciliationEngine
+            receipts = get_all_receipt_transactions()
+            bank_transactions = get_all_bank_transactions()
+            
+            if receipts and bank_transactions:
+                receipts_list = [json.loads(r.to_json()) for r in receipts]
+                bank_list = [json.loads(b.to_json()) for b in bank_transactions]
+                engine = AdvancedReconciliationEngine()
+                results = engine.reconcile_transactions(receipts_list, bank_list)
+                matched_count = len(results["matches"])
+            else:
+                matched_count = 0
+        except:
+            matched_count = 0
+        
         stats = {
             'total_receipts': len(get_all_receipt_transactions()),
             'total_bank_transactions': len(get_all_bank_transactions()),
+            'matched_transactions': matched_count
         }
 
         col1, col2, col3 = st.columns(3)
@@ -68,7 +87,7 @@ class ReceiptReconciliationApp:
         with col2:
             UIComponents.metric_card("Bank Transactions", stats['total_bank_transactions'])
         with col3:
-            UIComponents.metric_card("Matched Transactions", 0) # Placeholder
+            UIComponents.metric_card("Matched Transactions", stats['matched_transactions'])
 
     def email_processing_page(self):
         st.title("📧 Email Processing")
@@ -315,21 +334,142 @@ class ReceiptReconciliationApp:
         st.title("📊 Analytics")
         
         if st.button("Clean Up Duplicates"):
-            self.cleanup_duplicate_transactions()
+            try:
+                self.cleanup_duplicate_transactions()
+            except Exception as e:
+                st.error(f"❌ Cleanup failed: {str(e)}")
 
         receipts = get_all_receipt_transactions()
         if not receipts:
             st.warning("No receipt data to analyze.")
+            st.info("💡 Upload some receipts first to see analytics!")
             return
-        df = pd.DataFrame([json.loads(r.to_json()) for r in receipts])
-        df['transaction_date'] = pd.to_datetime(df['transaction_date']['$date'])
-        df['amount'] = df['amount'].apply(lambda x: float(x['$numberDecimal']))
-        st.subheader("Spending Over Time")
-        time_series = df.groupby(df['transaction_date'].dt.to_period("M")).sum()
-        st.line_chart(time_series['amount'])
-        st.subheader("Spending by Category")
-        category_spending = df.groupby('category')['amount'].sum()
-        st.plotly_chart(px.pie(category_spending, values='amount', names=category_spending.index))
+        
+        try:
+            # Convert to DataFrame
+            df = pd.DataFrame([json.loads(r.to_json()) for r in receipts])
+            
+            # 🔧 SAFE DATA CONVERSION with error handling
+            def safe_convert_date(x):
+                try:
+                    if isinstance(x, dict) and '$date' in x:
+                        return pd.to_datetime(x['$date'], unit='ms')
+                    return pd.to_datetime(x)
+                except:
+                    return pd.to_datetime('today')  # Fallback
+            
+            def safe_convert_amount(x):
+                try:
+                    if isinstance(x, dict) and '$numberDecimal' in x:
+                        return float(x['$numberDecimal'])
+                    return float(x)
+                except:
+                    return 0.0  # Fallback
+            
+            # Apply conversions
+            df['transaction_date'] = df['transaction_date'].apply(safe_convert_date)
+            df['amount'] = df['amount'].apply(safe_convert_amount)
+            
+            # 🎯 CREATE CLEAN DATAFRAME with only needed columns
+            clean_df = pd.DataFrame({
+                'transaction_date': df['transaction_date'],
+                'amount': df['amount'],
+                'category': df['category'].astype(str)  # Ensure string type
+            })
+            
+            # Remove any rows with invalid data
+            clean_df = clean_df.dropna()
+            clean_df = clean_df[clean_df['amount'] > 0]  # Remove zero amounts
+            
+            if len(clean_df) == 0:
+                st.warning("⚠️ No valid transaction data found for analytics.")
+                st.info("💡 Check your receipt data quality.")
+                return
+            
+            # 📊 SPENDING OVER TIME (Enhanced Debug)
+            st.subheader("📈 Spending Over Time")
+            try:
+                monthly_spending = clean_df.groupby(
+                    clean_df['transaction_date'].dt.to_period("M")
+                )['amount'].sum()
+                
+                st.write(f"**Debug Info:** {len(monthly_spending)} months of data found")
+                st.write("Monthly spending data:", monthly_spending)
+                
+                if len(monthly_spending) > 1:  # Need at least 2 points for a line
+                    st.line_chart(monthly_spending)
+                else:
+                    st.info("📅 Need transactions from multiple months for time series.")
+                    st.bar_chart(monthly_spending)  # Show as bar chart instead
+                    
+            except Exception as e:
+                st.error(f"❌ Time series error: {str(e)}")
+
+            # 📊 SPENDING BY CATEGORY (Enhanced Debug)  
+            st.subheader("🏷️ Spending by Category")
+            try:
+                category_spending = clean_df.groupby('category')['amount'].sum()
+                
+                st.write(f"**Debug Info:** {len(category_spending)} categories found")
+                st.write("Category spending data:", category_spending)
+                
+                if len(category_spending) > 1:  # Need multiple categories
+                    fig = px.pie(
+                        values=category_spending.values,
+                        names=category_spending.index,
+                        title="Spending Distribution by Category"
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.info("🏷️ All transactions in same category - showing bar chart instead")
+                    st.bar_chart(category_spending)
+                    
+            except Exception as e:
+                st.error(f"❌ Category chart error: {str(e)}")
+                
+            # 📊 SUMMARY STATISTICS
+            st.subheader("📋 Summary Statistics")
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                st.metric("💰 Total Spending", f"${clean_df['amount'].sum():.2f}")
+            with col2:
+                st.metric("📄 Total Receipts", len(clean_df))
+            with col3:
+                st.metric("📅 Date Range", f"{len(clean_df['transaction_date'].dt.date.unique())} days")
+            with col4:
+                st.metric("💳 Avg Transaction", f"${clean_df['amount'].mean():.2f}")
+                
+            # 📊 RECENT TRANSACTIONS TABLE
+            st.subheader("🕒 Recent Transactions")
+            recent_df = clean_df.sort_values('transaction_date', ascending=False).head(10)
+            display_df = recent_df.copy()
+            display_df['transaction_date'] = display_df['transaction_date'].dt.strftime('%Y-%m-%d')
+            display_df['amount'] = display_df['amount'].apply(lambda x: f"${x:.2f}")
+            
+            st.dataframe(
+                display_df[['transaction_date', 'amount', 'category']].rename(columns={
+                    'transaction_date': 'Date',
+                    'amount': 'Amount', 
+                    'category': 'Category'
+                }),
+                use_container_width=True
+            )
+            
+        except Exception as e:
+            st.error(f"❌ Analytics processing failed: {str(e)}")
+            st.info("🔧 Try cleaning up duplicates first, or check your receipt data quality.")
+            
+            # Debug information
+            if st.checkbox("🔍 Show Debug Info"):
+                st.code(f"Error details: {str(e)}")
+                try:
+                    st.write("Sample data structure:")
+                    if receipts:
+                        sample = json.loads(receipts[0].to_json())
+                        st.json(sample)
+                except:
+                    st.write("Could not display sample data")
 
     def display_processing_progress(self, processed_receipts):
         st.markdown("### 🔄 Processing emails...")
@@ -387,12 +527,13 @@ class ReceiptReconciliationApp:
         for txn in all_bank:
             key = (txn.description, txn.amount, txn.transaction_date)
             if key in seen:
-                duplicates.append(txn.id)
+                duplicates.append(txn.id)  # or txn._id depending on your model
             else:
-                seen[key] = txn.id
+                seen[key] = txn.id  # or txn._id
         
         # Delete duplicates
         if duplicates:
-            from mongoengine.queryset.visitor import Q
             BankTransaction.objects(id__in=duplicates).delete()
-            st.info(f"Cleaned {len(duplicates)} duplicate transactions")
+            st.success(f"🗑️ Cleaned {len(duplicates)} duplicate transactions")
+        else:
+            st.info("✨ No duplicates found - database is clean!")
